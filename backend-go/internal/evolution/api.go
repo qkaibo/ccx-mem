@@ -261,6 +261,10 @@ func getSkill(deps *APIDeps) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "skill not found"})
 			return
 		}
+		if s == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "skill not found"})
+			return
+		}
 		c.JSON(http.StatusOK, s)
 	}
 }
@@ -325,6 +329,10 @@ func publishDefect(deps *APIDeps) gin.HandlerFunc {
 		}
 		defect, err := deps.Store.GetDefect(id)
 		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "defect not found"})
+			return
+		}
+		if defect == nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "defect not found"})
 			return
 		}

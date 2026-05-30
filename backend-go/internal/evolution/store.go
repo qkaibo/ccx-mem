@@ -433,10 +433,12 @@ func (s *Store) ListAuditLogs(limit int) ([]*AuditLog, error) {
 	for rows.Next() {
 		l := &AuditLog{}
 		var passed int
-		if err := rows.Scan(&l.ID, &l.PromptID, &l.RulesChecked, &l.RulesPassed, &l.RulesFailed, &l.Violations, &passed, &l.CreatedAt); err != nil {
+		var createdAt string
+		if err := rows.Scan(&l.ID, &l.PromptID, &l.RulesChecked, &l.RulesPassed, &l.RulesFailed, &l.Violations, &passed, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan audit log: %w", err)
 		}
 		l.Passed = passed != 0
+		l.CreatedAt, _ = time.Parse("2006-01-02T15:04:05Z07:00", createdAt)
 		logs = append(logs, l)
 	}
 	return logs, nil
@@ -561,7 +563,8 @@ func (s *Store) ListSharedLearning(limit int) ([]*SharedLearningRecord, error) {
 		r := &SharedLearningRecord{}
 		var published int
 		var publishedAt *string
-		if err := rows.Scan(&r.ID, &r.SourceType, &r.SourceID, &r.TargetURI, &published, &publishedAt, &r.ErrorMessage, &r.CreatedAt); err != nil {
+		var createdAt string
+		if err := rows.Scan(&r.ID, &r.SourceType, &r.SourceID, &r.TargetURI, &published, &publishedAt, &r.ErrorMessage, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan shared learning: %w", err)
 		}
 		r.Published = published != 0
@@ -571,6 +574,7 @@ func (s *Store) ListSharedLearning(limit int) ([]*SharedLearningRecord, error) {
 				r.PublishedAt = &t
 			}
 		}
+		r.CreatedAt, _ = time.Parse("2006-01-02T15:04:05Z07:00", createdAt)
 		records = append(records, r)
 	}
 	return records, nil
