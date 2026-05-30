@@ -34,6 +34,11 @@ type EnvConfig struct {
 	EvolutionMaxTraces        int  // 每次分析最大轨迹数（默认 100）
 	EvolutionAutoApply        bool // 是否自动应用补丁（默认 false）
 
+	// OpenViking 配置
+	OpenVikingEnabled  bool
+	OpenVikingEndpoint string
+	OpenVikingAPIKey   string
+
 	RequestTimeout     int
 	MaxRequestBodySize int64 // 请求体最大大小 (字节)，由 MB 配置转换
 	EnableCORS         bool
@@ -92,6 +97,11 @@ func NewEnvConfig() *EnvConfig {
 		EvolutionAnalysisInterval: clampInt(getEnvAsInt("EVOLUTION_ANALYSIS_INTERVAL", 60), 1, 1440),
 		EvolutionMaxTraces:        clampInt(getEnvAsInt("EVOLUTION_MAX_TRACES", 100), 10, 10000),
 		EvolutionAutoApply:        getEnv("EVOLUTION_AUTO_APPLY", "false") == "true",
+
+		// OpenViking 配置
+		OpenVikingEnabled:  getEnv("OPENVIKING_ENABLED", "false") == "true",
+		OpenVikingEndpoint: getEnv("OPENVIKING_ENDPOINT", ""),
+		OpenVikingAPIKey:   getEnv("OPENVIKING_API_KEY", ""),
 
 		RequestTimeout:     getEnvAsInt("REQUEST_TIMEOUT", 300000),
 		MaxRequestBodySize: getEnvAsInt64("MAX_REQUEST_BODY_SIZE_MB", 50) * 1024 * 1024, // MB 转换为字节

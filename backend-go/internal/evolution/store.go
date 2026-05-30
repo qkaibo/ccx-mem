@@ -55,6 +55,35 @@ type Defect struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// Skill represents a reusable agent skill (SKILL.md format).
+type Skill struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Content     string    `json:"content"`
+	Version     string    `json:"version"`
+	Author      string    `json:"author"`
+	Tags        string    `json:"tags"`       // comma-separated
+	Category    string    `json:"category"`
+	Status      string    `json:"status"`     // active, draft, archived
+	PromptID    int64     `json:"prompt_id"`  // optional, links to a prompt
+	Hash        string    `json:"hash"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// SharedLearningRecord records a published learning to OpenViking.
+type SharedLearningRecord struct {
+	ID            int64     `json:"id"`
+	SourceType    string    `json:"source_type"` // defect, patch, audit, skill
+	SourceID      int64     `json:"source_id"`
+	TargetURI     string    `json:"target_uri"`    // viking://resources/...
+	Published     bool      `json:"published"`
+	PublishedAt   *time.Time `json:"published_at,omitempty"`
+	ErrorMessage  string    `json:"error_message,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
 // AuditLog records a prompt audit result.
 type AuditLog struct {
 	ID           int64     `json:"id"`
@@ -128,6 +157,31 @@ func (s *Store) migrate() error {
 			rules_failed INTEGER NOT NULL DEFAULT 0,
 			violations TEXT NOT NULL DEFAULT '',
 			passed INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)`,
+		`CREATE TABLE IF NOT EXISTS skills (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			description TEXT NOT NULL DEFAULT '',
+			content TEXT NOT NULL,
+			version TEXT NOT NULL DEFAULT 'v1',
+			author TEXT NOT NULL DEFAULT '',
+			tags TEXT NOT NULL DEFAULT '',
+			category TEXT NOT NULL DEFAULT 'general',
+			status TEXT NOT NULL DEFAULT 'draft',
+			prompt_id INTEGER NOT NULL DEFAULT 0,
+			hash TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)`,
+		`CREATE TABLE IF NOT EXISTS shared_learning (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			source_type TEXT NOT NULL DEFAULT '',
+			source_id INTEGER NOT NULL DEFAULT 0,
+			target_uri TEXT NOT NULL DEFAULT '',
+			published INTEGER NOT NULL DEFAULT 0,
+			published_at TEXT,
+			error_message TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL DEFAULT (datetime('now'))
 		)`,
 	}
@@ -386,6 +440,140 @@ func (s *Store) ListAuditLogs(limit int) ([]*AuditLog, error) {
 		logs = append(logs, l)
 	}
 	return logs, nil
+}
+
+// --- Skill CRUD ---
+
+func (s *Store) CreateSkill(sk *Skill) (int64, error) {
+	result, err := s.db.Exec(
+		`INSERT INTO skills (name, description, content, version, author, tags, category, status, prompt_id, hash)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		sk.Name, sk.Description, sk.Content, sk.Version, sk.Author, sk.Tags, sk.Category, sk.Status, sk.PromptID, sk.Hash,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("create skill: %w", err)
+	}
+	return result.LastInsertId()
+}
+
+func (s *Store) GetSkill(id int64) (*Skill, error) {
+	sk := &Skill{}
+	var createdAt, updatedAt string
+	var promptID int64
+	err := s.db.QueryRow(
+		`SELECT id, name, description, content, version, author, tags, category, status, prompt_id, hash, created_at, updated_at FROM skills WHERE id = ?`, id,
+	).Scan(&sk.ID, &sk.Name, &sk.Description, &sk.Content, &sk.Version, &sk.Author, &sk.Tags, &sk.Category, &sk.Status, &promptID, &sk.Hash, &createdAt, &updatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get skill: %w", err)
+	}
+	sk.PromptID = promptID
+	sk.CreatedAt, _ = time.Parse("2006-01-02T15:04:05Z07:00", createdAt)
+	sk.UpdatedAt, _ = time.Parse("2006-01-02T15:04:05Z07:00", updatedAt)
+	return sk, nil
+}
+
+func (s *Store) ListSkills(category, status string, limit, offset int) ([]*Skill, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	var query string
+	var args []interface{}
+	if category != "" && status != "" {
+		query = `SELECT id, name, description, content, version, author, tags, category, status, prompt_id, hash, created_at, updated_at FROM skills WHERE category=? AND status=? ORDER BY id DESC LIMIT ? OFFSET ?`
+		args = append(args, category, status, limit, offset)
+	} else if category != "" {
+		query = `SELECT id, name, description, content, version, author, tags, category, status, prompt_id, hash, created_at, updated_at FROM skills WHERE category=? ORDER BY id DESC LIMIT ? OFFSET ?`
+		args = append(args, category, limit, offset)
+	} else if status != "" {
+		query = `SELECT id, name, description, content, version, author, tags, category, status, prompt_id, hash, created_at, updated_at FROM skills WHERE status=? ORDER BY id DESC LIMIT ? OFFSET ?`
+		args = append(args, status, limit, offset)
+	} else {
+		query = `SELECT id, name, description, content, version, author, tags, category, status, prompt_id, hash, created_at, updated_at FROM skills ORDER BY id DESC LIMIT ? OFFSET ?`
+		args = append(args, limit, offset)
+	}
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list skills: %w", err)
+	}
+	defer rows.Close()
+
+	var skills []*Skill
+	for rows.Next() {
+		sk := &Skill{}
+		var createdAt, updatedAt string
+		var promptID int64
+		if err := rows.Scan(&sk.ID, &sk.Name, &sk.Description, &sk.Content, &sk.Version, &sk.Author, &sk.Tags, &sk.Category, &sk.Status, &promptID, &sk.Hash, &createdAt, &updatedAt); err != nil {
+			return nil, fmt.Errorf("scan skill: %w", err)
+		}
+		sk.PromptID = promptID
+		sk.CreatedAt, _ = time.Parse("2006-01-02T15:04:05Z07:00", createdAt)
+		sk.UpdatedAt, _ = time.Parse("2006-01-02T15:04:05Z07:00", updatedAt)
+		skills = append(skills, sk)
+	}
+	return skills, nil
+}
+
+func (s *Store) UpdateSkill(id int64, sk *Skill) error {
+	_, err := s.db.Exec(
+		`UPDATE skills SET name=?, description=?, content=?, version=?, author=?, tags=?, category=?, status=?, prompt_id=?, hash=?, updated_at=datetime('now') WHERE id=?`,
+		sk.Name, sk.Description, sk.Content, sk.Version, sk.Author, sk.Tags, sk.Category, sk.Status, sk.PromptID, sk.Hash, id,
+	)
+	return err
+}
+
+func (s *Store) DeleteSkill(id int64) error {
+	_, err := s.db.Exec(`DELETE FROM skills WHERE id=?`, id)
+	return err
+}
+
+// --- Shared Learning Record CRUD ---
+
+func (s *Store) CreateSharedLearning(r *SharedLearningRecord) (int64, error) {
+	result, err := s.db.Exec(
+		`INSERT INTO shared_learning (source_type, source_id, target_uri, published, error_message)
+		 VALUES (?, ?, ?, ?, ?)`,
+		r.SourceType, r.SourceID, r.TargetURI, boolToInt(r.Published), r.ErrorMessage,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("create shared learning record: %w", err)
+	}
+	return result.LastInsertId()
+}
+
+func (s *Store) ListSharedLearning(limit int) ([]*SharedLearningRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(
+		`SELECT id, source_type, source_id, target_uri, published, published_at, error_message, created_at
+		 FROM shared_learning ORDER BY id DESC LIMIT ?`, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list shared learning: %w", err)
+	}
+	defer rows.Close()
+
+	var records []*SharedLearningRecord
+	for rows.Next() {
+		r := &SharedLearningRecord{}
+		var published int
+		var publishedAt *string
+		if err := rows.Scan(&r.ID, &r.SourceType, &r.SourceID, &r.TargetURI, &published, &publishedAt, &r.ErrorMessage, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan shared learning: %w", err)
+		}
+		r.Published = published != 0
+		if publishedAt != nil {
+			t, err := time.Parse("2006-01-02T15:04:05Z07:00", *publishedAt)
+			if err == nil {
+				r.PublishedAt = &t
+			}
+		}
+		records = append(records, r)
+	}
+	return records, nil
 }
 
 // --- Helpers ---
