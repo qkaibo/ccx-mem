@@ -18,6 +18,8 @@ export type MessageKey =
   | 'app.tabs.gemini'
   | 'app.tabs.images'
   | 'app.tabs.conversations'
+  | 'app.tabs.memories'
+  | 'app.tabs.evolution'
   | 'cockpit.overrideActive'
   | 'cockpit.restoreDefault'
   | 'cockpit.empty'
@@ -458,6 +460,8 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'app.tabs.gemini': 'Gemini',
     'app.tabs.images': 'Images',
     'app.tabs.conversations': 'Cockpit',
+    'app.tabs.memories': 'Memory',
+    'app.tabs.evolution': 'Evolution',
     'cockpit.overrideActive': 'Custom channel order is active. Auto-reset in {time}',
     'cockpit.restoreDefault': 'Restore default order',
     'cockpit.empty': 'No active flights. Conversations will appear on radar when requests pass through the gateway.',
@@ -897,6 +901,8 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'app.tabs.gemini': 'Gemini',
     'app.tabs.images': 'Images',
     'app.tabs.conversations': 'Cockpit',
+    'app.tabs.memories': 'Memori',
+    'app.tabs.evolution': 'Evolusi',
     'cockpit.overrideActive': 'Urutan channel kustom aktif. Otomatis kembali dalam {time}',
     'cockpit.restoreDefault': 'Pulihkan urutan default',
     'cockpit.empty': 'Belum ada sesi aktif. Percakapan akan muncul di radar saat request melewati gateway.',
@@ -1336,6 +1342,8 @@ export const messages: Record<SupportedLocale, Record<MessageKey, string>> = {
     'app.tabs.gemini': 'Gemini',
     'app.tabs.images': 'Images',
     'app.tabs.conversations': '驾驶舱',
+    'app.tabs.memories': '记忆',
+    'app.tabs.evolution': '进化',
     'cockpit.overrideActive': '正在使用自定义渠道顺序，{time} 后自动恢复默认调度',
     'cockpit.restoreDefault': '恢复默认顺序',
     'cockpit.empty': '暂无活跃会话。请求经过网关后，会话会出现在驾驶舱雷达上。',

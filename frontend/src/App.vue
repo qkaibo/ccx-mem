@@ -92,6 +92,13 @@
             >
               <v-list-item-title>{{ tab.label }}</v-list-item-title>
             </v-list-item>
+            <v-divider class="my-1" />
+            <v-list-item to="/memories" :active="route.path === '/memories'">
+              <v-list-item-title>{{ t('app.tabs.memories') }}</v-list-item-title>
+            </v-list-item>
+            <v-list-item to="/evolution" :active="route.path === '/evolution'">
+              <v-list-item-title>{{ t('app.tabs.evolution') }}</v-list-item-title>
+            </v-list-item>
           </v-list>
         </v-menu>
 
@@ -115,6 +122,14 @@
           <span class="api-type-text separator">/</span>
           <router-link to="/channels/gemini" class="api-type-text" :class="{ active: channelStore.activeTab === 'gemini' && route.path !== '/conversations' }">
             {{ t('app.tabs.gemini') }}
+          </router-link>
+          <span class="api-type-text separator">/</span>
+          <router-link to="/memories" class="api-type-text" :class="{ active: route.path === '/memories' }">
+            {{ t('app.tabs.memories') }}
+          </router-link>
+          <span class="api-type-text separator">/</span>
+          <router-link to="/evolution" class="api-type-text" :class="{ active: route.path === '/evolution' }">
+            {{ t('app.tabs.evolution') }}
           </router-link>
           <span class="api-type-text separator">/</span>
           <router-link to="/conversations" class="api-type-text" :class="{ active: route.path === '/conversations' }">

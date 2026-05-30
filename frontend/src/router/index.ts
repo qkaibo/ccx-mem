@@ -16,6 +16,16 @@ const routes = [
     path: '/conversations',
     component: () => import('@/views/ConversationsView.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/memories',
+    component: () => import('@/views/MemoriesView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/evolution',
+    component: () => import('@/views/EvolutionView.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 

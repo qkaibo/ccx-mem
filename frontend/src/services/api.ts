@@ -648,6 +648,109 @@ export interface ChannelModelsRequest {
   baseUrls?: string[]
 }
 
+// ============== 记忆 API 类型 ==============
+
+export interface MemoryRecord {
+  id: number
+  content: string
+  layer: string
+  user_id?: string
+  tags: string
+  source: string
+  created_at: string
+  updated_at: string
+}
+
+export interface MemorySearchRequest {
+  q: string
+  layer?: string
+  limit?: number
+}
+
+export interface MemoryCreateRequest {
+  content: string
+  layer?: string
+  user_id?: string
+  tags?: string
+  source?: string
+}
+
+export interface MemorySearchResponse {
+  memories: MemoryRecord[]
+  total: number
+}
+
+export interface DreamResponse {
+  extracted: number
+  message: string
+}
+
+// ============== 自进化 API 类型 ==============
+
+export interface EvolutionPrompt {
+  id: number
+  name: string
+  content: string
+  version: string
+  category: string
+  hash: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EvolutionTrace {
+  id: number
+  prompt_id: number
+  user_id: string
+  request_summary: string
+  success: boolean
+  created_at: string
+}
+
+export interface EvolutionDefect {
+  id: number
+  trace_id: number
+  rule_id: string
+  severity: string
+  description: string
+  location: string
+  suggestion: string
+  patched: boolean
+  created_at: string
+}
+
+export interface EvolutionPromptCreate {
+  name: string
+  content: string
+  category?: string
+}
+
+export interface EvolutionPromptListResponse {
+  prompts: EvolutionPrompt[]
+}
+
+export interface EvolutionTraceListResponse {
+  traces: EvolutionTrace[]
+}
+
+export interface EvolutionDefectListResponse {
+  defects: EvolutionDefect[]
+}
+
+export interface EvolutionAuditResult {
+  prompt_id: number
+  total_rules: number
+  passed: number
+  failed: number
+  defects_found: number
+}
+
+export interface EvolutionAnalyzeResult {
+  traces_analyzed: number
+  defects_found: number
+}
+
 export class ApiService {
   private t(key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]): string {
     const preferencesStore = usePreferencesStore()
@@ -1512,6 +1615,95 @@ export class ApiService {
     await this.request(`/conversations/${id}/override`, {
       method: 'DELETE'
     })
+  }
+
+  // ============== 记忆 API ==============
+
+  async getMemories(query?: string, layer?: string, limit?: number): Promise<MemorySearchResponse> {
+    const params = new URLSearchParams()
+    if (query) params.set('q', query)
+    if (layer) params.set('layer', layer)
+    if (limit) params.set('limit', String(limit))
+    const qs = params.toString()
+    return this.request(`/v2/memories/query?${qs}`)
+  }
+
+  async getMemory(id: number): Promise<MemoryRecord> {
+    return this.request(`/v2/memories/${id}`)
+  }
+
+  async createMemory(data: MemoryCreateRequest): Promise<MemoryRecord> {
+    return this.request('/v2/memories', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async updateMemory(id: number, data: Partial<MemoryCreateRequest>): Promise<MemoryRecord> {
+    return this.request(`/v2/memories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteMemory(id: number): Promise<void> {
+    await this.request(`/v2/memories/${id}`, { method: 'DELETE' })
+  }
+
+  async triggerDream(): Promise<DreamResponse> {
+    return this.request('/v2/memories/_dream', { method: 'POST' })
+  }
+
+  // ============== 自进化 API ==============
+
+  async getEvolutionPrompts(limit?: number, offset?: number): Promise<EvolutionPromptListResponse> {
+    const params = new URLSearchParams()
+    if (limit) params.set('limit', String(limit))
+    if (offset) params.set('offset', String(offset))
+    const qs = params.toString()
+    return this.request(`/v2/evolution/prompts${qs ? '?' + qs : ''}`)
+  }
+
+  async getEvolutionPrompt(id: number): Promise<EvolutionPrompt> {
+    return this.request(`/v2/evolution/prompts/${id}`)
+  }
+
+  async createEvolutionPrompt(data: EvolutionPromptCreate): Promise<EvolutionPrompt> {
+    return this.request('/v2/evolution/prompts', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async updateEvolutionPrompt(id: number, data: Partial<EvolutionPromptCreate>): Promise<EvolutionPrompt> {
+    return this.request(`/v2/evolution/prompts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteEvolutionPrompt(id: number): Promise<void> {
+    await this.request(`/v2/evolution/prompts/${id}`, { method: 'DELETE' })
+  }
+
+  async getEvolutionTraces(limit?: number, offset?: number): Promise<EvolutionTraceListResponse> {
+    const params = new URLSearchParams()
+    if (limit) params.set('limit', String(limit))
+    if (offset) params.set('offset', String(offset))
+    const qs = params.toString()
+    return this.request(`/v2/evolution/traces${qs ? '?' + qs : ''}`)
+  }
+
+  async getEvolutionDefects(): Promise<EvolutionDefectListResponse> {
+    return this.request('/v2/evolution/defects')
+  }
+
+  async triggerEvolutionAnalyze(): Promise<EvolutionAnalyzeResult> {
+    return this.request('/v2/evolution/analyze', { method: 'POST' })
+  }
+
+  async triggerEvolutionAudit(): Promise<EvolutionAuditResult> {
+    return this.request('/v2/evolution/audit', { method: 'POST' })
   }
 
 }
