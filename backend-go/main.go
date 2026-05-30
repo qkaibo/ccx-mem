@@ -230,22 +230,22 @@ func main() {
 		})
 		log.Printf("[Evolution-Init] 自进化系统已初始化 (db: %s)", evoCfg.DBPath)
 
-				// 创建子系统上下文（用于优雅关闭内存/进化后台 goroutine）
-				subsystemCtx, subsystemCancel = context.WithCancel(context.Background())
+		// 创建子系统上下文（用于优雅关闭内存/进化后台 goroutine）
+		subsystemCtx, subsystemCancel = context.WithCancel(context.Background())
 
-				// 启动自进化分析循环
-				go evolution.RunLoop(subsystemCtx, evolution.LoopConfig{
-					Interval:  time.Duration(envCfg.EvolutionAnalysisInterval) * time.Minute,
-					AutoApply: envCfg.EvolutionAutoApply,
-				}, evolutionAnalyzer, evolutionStore, evolutionPatcher, evolutionPublisher)
+		// 启动自进化分析循环
+		go evolution.RunLoop(subsystemCtx, evolution.LoopConfig{
+			Interval:  time.Duration(envCfg.EvolutionAnalysisInterval) * time.Minute,
+			AutoApply: envCfg.EvolutionAutoApply,
+		}, evolutionAnalyzer, evolutionStore, evolutionPatcher, evolutionPublisher)
 
-				// 启动梦境提取器（后台自动从执行轨迹提取记忆）
-				if memoryStore != nil {
-					memoryDreamer = memory.NewDreamer(evolutionTracker, memoryStore, &memory.DreamerConfig{
-						MaxTraces: envCfg.EvolutionMaxTraces,
-					})
-					go memoryDreamer.Run(subsystemCtx, 30*time.Minute)
-				}
+		// 启动梦境提取器（后台自动从执行轨迹提取记忆）
+		if memoryStore != nil {
+			memoryDreamer = memory.NewDreamer(evolutionTracker, memoryStore, &memory.DreamerConfig{
+				MaxTraces: envCfg.EvolutionMaxTraces,
+			})
+			go memoryDreamer.Run(subsystemCtx, 30*time.Minute)
+		}
 	} else {
 		log.Printf("[Evolution-Init] 自进化功能已禁用 (EVOLUTION_ENABLED=false)")
 	}
