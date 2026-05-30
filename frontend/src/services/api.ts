@@ -751,6 +751,81 @@ export interface EvolutionAnalyzeResult {
   defects_found: number
 }
 
+export interface EvolutionSkill {
+  id: number
+  name: string
+  description: string
+  content: string
+  version: string
+  author: string
+  tags: string
+  category: string
+  status: string
+  prompt_id: number
+  hash: string
+  created_at: string
+  updated_at: string
+}
+
+export interface EvolutionSkillCreate {
+  name: string
+  description?: string
+  content: string
+  version?: string
+  author?: string
+  tags?: string
+  category?: string
+  status?: string
+  prompt_id?: number
+  hash?: string
+}
+
+export interface EvolutionSkillListResponse {
+  skills: EvolutionSkill[]
+}
+
+export interface SharedLearningRecord {
+  id: number
+  source_type: string
+  source_id: number
+  target_uri: string
+  published: boolean
+  published_at?: string
+  error_message?: string
+  created_at: string
+}
+
+export interface SharedLearningListResponse {
+  records: SharedLearningRecord[]
+}
+
+export interface PublishResult {
+  id?: number
+  source_type?: string
+  source_id?: number
+  target_uri?: string
+  published: boolean
+  published_at?: string
+  error_message?: string
+}
+
+export interface PublishPatchRequest {
+  new_version: string
+  new_content: string
+  reason?: string
+}
+
+export interface SearchOpenVikingRequest {
+  query: string
+  target_uri?: string
+  limit?: number
+}
+
+export interface SearchOpenVikingResult {
+  results: string
+  result?: string
+}
+
 export class ApiService {
   private t(key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]): string {
     const preferencesStore = usePreferencesStore()
@@ -1704,6 +1779,72 @@ export class ApiService {
 
   async triggerEvolutionAudit(): Promise<EvolutionAuditResult> {
     return this.request('/v2/evolution/audit', { method: 'POST' })
+  }
+
+  // --- Skill CRUD ---
+
+  async getEvolutionSkills(category?: string, status?: string, limit?: number, offset?: number): Promise<EvolutionSkillListResponse> {
+    const qs = new URLSearchParams()
+    if (category) qs.set('category', category)
+    if (status) qs.set('status', status)
+    if (limit) qs.set('limit', String(limit))
+    if (offset) qs.set('offset', String(offset))
+    return this.request(`/v2/evolution/skills${qs.toString() ? '?' + qs.toString() : ''}`)
+  }
+
+  async createEvolutionSkill(data: EvolutionSkillCreate): Promise<{ id: number }> {
+    return this.request('/v2/evolution/skills', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getEvolutionSkill(id: number): Promise<EvolutionSkill> {
+    return this.request(`/v2/evolution/skills/${id}`)
+  }
+
+  async updateEvolutionSkill(id: number, data: Partial<EvolutionSkillCreate>): Promise<void> {
+    await this.request(`/v2/evolution/skills/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteEvolutionSkill(id: number): Promise<void> {
+    await this.request(`/v2/evolution/skills/${id}`, { method: 'DELETE' })
+  }
+
+  // --- Shared Learning ---
+
+  async getSharedLearning(limit?: number): Promise<SharedLearningListResponse> {
+    const qs = limit ? `?limit=${limit}` : ''
+    return this.request(`/v2/evolution/shared-learning${qs}`)
+  }
+
+  // --- Publish ---
+
+  async publishDefect(id: number): Promise<PublishResult> {
+    return this.request(`/v2/evolution/publish/defect/${id}`, { method: 'POST' })
+  }
+
+  async publishPatch(promptId: number, data: PublishPatchRequest): Promise<PublishResult> {
+    return this.request(`/v2/evolution/publish/patch/${promptId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async publishAudit(id: number): Promise<PublishResult> {
+    return this.request(`/v2/evolution/publish/audit/${id}`, { method: 'POST' })
+  }
+
+  // --- Search OpenViking ---
+
+  async searchOpenViking(query: string, targetUri?: string, limit?: number): Promise<SearchOpenVikingResult> {
+    return this.request('/v2/evolution/search', {
+      method: 'POST',
+      body: JSON.stringify({ query, target_uri: targetUri, limit }),
+    })
   }
 
 }
