@@ -14,6 +14,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
+	"github.com/BenedictKing/ccx/internal/memory"
 	"github.com/BenedictKing/ccx/internal/middleware"
 	"github.com/BenedictKing/ccx/internal/scheduler"
 	"github.com/BenedictKing/ccx/internal/types"
@@ -27,6 +28,7 @@ func Handler(
 	envCfg *config.EnvConfig,
 	cfgManager *config.ConfigManager,
 	channelScheduler *scheduler.ChannelScheduler,
+	memoryInjector *memory.Injector,
 ) gin.HandlerFunc {
 	return gin.HandlerFunc(func(c *gin.Context) {
 		// Chat 代理端点统一使用代理访问密钥鉴权（x-api-key / Authorization: Bearer）
@@ -86,6 +88,13 @@ func Handler(
 		// 预处理：清理历史 thinking 内容块/字段，预防上游参数校验 400
 		bodyBytes, thinkingModified := common.SanitizeMalformedThinkingBlocks(bodyBytes, envCfg.EnableRequestLogs, "Chat")
 		_ = thinkingModified
+
+		// 记忆注入（ccx-mem）
+		if memoryInjector != nil {
+			var memModified bool
+			bodyBytes, memModified = memoryInjector.Inject(bodyBytes, userID, envCfg.EnableRequestLogs)
+			_ = memModified
+		}
 
 		// 记录原始请求信息
 		common.LogOriginalRequest(c, bodyBytes, envCfg, "Chat")

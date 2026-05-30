@@ -21,6 +21,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/handlers/messages"
 	"github.com/BenedictKing/ccx/internal/handlers/responses"
 	"github.com/BenedictKing/ccx/internal/logger"
+	"github.com/BenedictKing/ccx/internal/memory"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/middleware"
 	"github.com/BenedictKing/ccx/internal/scheduler"
@@ -168,6 +169,33 @@ func main() {
 	overrideManager := conversation.NewOverrideManager(30 * time.Minute)
 	channelScheduler.SetConversationComponents(conversationTracker, overrideManager)
 	log.Printf("[Conversation-Init] 对话追踪器和覆盖管理器已初始化 (idle: 1h, expire: 2h, override TTL: 30m)")
+
+	// 初始化记忆系统（ccx-mem）
+	var memoryStore *memory.Store
+	var memoryInjector *memory.Injector
+	if envCfg.MemoryEnabled {
+		memCfg := &memory.StoreConfig{DBPath: envCfg.MemoryDBPath}
+		if memCfg.DBPath == "" {
+			memCfg.DBPath = ".config/memory.db"
+		}
+		var initErr error
+		memoryStore, initErr = memory.NewStore(memCfg)
+		if initErr != nil {
+			log.Printf("[Memory-Init] 警告: 初始化记忆存储失败: %v，记忆功能已禁用", initErr)
+			envCfg.MemoryEnabled = false
+		} else {
+			injectorCfg := memory.InjectorConfig{
+				Enabled:            true,
+				MaxCoreMemories:    envCfg.MemoryMaxCore,
+				MaxIndexedMemories: envCfg.MemoryMaxIndexed,
+			}
+			memoryInjector = memory.NewInjector(memoryStore, injectorCfg)
+			log.Printf("[Memory-Init] 记忆系统已初始化 (db: %s, core: %d, indexed: %d)",
+				memCfg.DBPath, injectorCfg.MaxCoreMemories, injectorCfg.MaxIndexedMemories)
+		}
+	} else {
+		log.Printf("[Memory-Init] 记忆功能已禁用 (MEMORY_ENABLED=false)")
+	}
 
 	scheduledRecoveryStop := make(chan struct{})
 	go func() {
@@ -465,6 +493,17 @@ func main() {
 		apiGroup.GET("/images/models/stats/history", handlers.GetModelStatsHistory(imagesMetricsManager))
 		apiGroup.GET("/images/channels/:id/logs", handlers.GetChannelLogs(channelScheduler.GetChannelLogStore(scheduler.ChannelKindImages)))
 
+		// Memory API（ccx-mem）
+		if memoryStore != nil {
+			memDeps := &memory.MemoryAPIDeps{
+				Store:        memoryStore,
+				Injector:     memoryInjector,
+				EnvCfg:       envCfg,
+			}
+			memory.SetupRoutes(apiGroup, memDeps)
+			log.Printf("[Memory-API] 记忆 API 已注册 (/api/v2/memories)")
+		}
+
 		// Fuzzy 模式设置
 		apiGroup.GET("/settings/fuzzy-mode", handlers.GetFuzzyMode(cfgManager))
 		apiGroup.PUT("/settings/fuzzy-mode", handlers.SetFuzzyMode(cfgManager))
@@ -540,7 +579,7 @@ func main() {
 	r.POST("/:routePrefix/v1beta/models/*modelAction", geminiHandler)
 
 	// 代理端点 - Chat Completions API (OpenAI 兼容)
-	chatHandler := chat.Handler(envCfg, cfgManager, channelScheduler)
+	chatHandler := chat.Handler(envCfg, cfgManager, channelScheduler, memoryInjector)
 	r.POST("/v1/chat/completions", chatHandler)
 	r.POST("/:routePrefix/v1/chat/completions", chatHandler)
 
@@ -645,6 +684,15 @@ func main() {
 				log.Printf("[Metrics-Shutdown] 警告: 关闭指标存储时发生错误: %v", err)
 			} else {
 				log.Println("[Metrics-Shutdown] 指标存储已安全关闭")
+			}
+		}
+
+		// 关闭记忆存储
+		if memoryStore != nil {
+			if err := memoryStore.Close(); err != nil {
+				log.Printf("[Memory-Shutdown] 警告: 关闭记忆存储时发生错误: %v", err)
+			} else {
+				log.Println("[Memory-Shutdown] 记忆存储已安全关闭")
 			}
 		}
 
