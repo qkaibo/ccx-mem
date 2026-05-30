@@ -13,6 +13,7 @@ import (
 
 	"github.com/BenedictKing/ccx/internal/config"
 	"github.com/BenedictKing/ccx/internal/converters"
+	"github.com/BenedictKing/ccx/internal/evolution"
 	"github.com/BenedictKing/ccx/internal/handlers/common"
 	"github.com/BenedictKing/ccx/internal/memory"
 	"github.com/BenedictKing/ccx/internal/middleware"
@@ -29,6 +30,7 @@ func Handler(
 	cfgManager *config.ConfigManager,
 	channelScheduler *scheduler.ChannelScheduler,
 	memoryInjector *memory.Injector,
+	evolutionTracker *evolution.Tracker,
 ) gin.HandlerFunc {
 	return gin.HandlerFunc(func(c *gin.Context) {
 		// Chat 代理端点统一使用代理访问密钥鉴权（x-api-key / Authorization: Bearer）
@@ -107,7 +109,66 @@ func Handler(
 		} else {
 			handleSingleChannel(c, envCfg, cfgManager, channelScheduler, bodyBytes, model, isStream, startTime)
 		}
+
+		// 自进化轨迹记录（ccx-mem）
+		if evolutionTracker != nil {
+			trace := buildExecutionTrace(bodyBytes, userID, model, startTime, c.Writer.Status())
+			if _, err := evolutionTracker.RecordTrace(trace); err != nil {
+				log.Printf("[Evolution-Trace] 记录轨迹失败: %v", err)
+			}
+		}
 	})
+}
+
+// buildExecutionTrace 从请求体构建执行轨迹记录
+func buildExecutionTrace(bodyBytes []byte, userID, model string, startTime time.Time, httpStatus int) *evolution.ExecutionTrace {
+	success := httpStatus >= 200 && httpStatus < 300
+	errorType := ""
+	if !success {
+		errorType = fmt.Sprintf("http_%d", httpStatus)
+	}
+
+	summary := model
+	// 尝试提取第一条 user message 作为请求摘要
+	if msg := extractFirstUserMessage(bodyBytes); msg != "" {
+		summary = truncateString(msg, 120)
+	}
+
+	return &evolution.ExecutionTrace{
+		PromptID:       0, // prompt_id 可选，由记忆系统后续关联
+		UserID:         userID,
+		RequestSummary: summary,
+		Success:        success,
+		ErrorType:      errorType,
+		LatencyMs:      time.Since(startTime).Milliseconds(),
+	}
+}
+
+// extractFirstUserMessage 从请求体提取第一条用户消息文本
+func extractFirstUserMessage(bodyBytes []byte) string {
+	var body struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(bodyBytes, &body); err != nil {
+		return ""
+	}
+	for _, m := range body.Messages {
+		if m.Role == "user" && m.Content != "" {
+			return m.Content
+		}
+	}
+	return ""
+}
+
+// truncateString 截断字符串到 maxLen
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // handleMultiChannel 处理多渠道 Chat 请求

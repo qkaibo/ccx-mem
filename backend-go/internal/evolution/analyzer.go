@@ -7,7 +7,8 @@ import (
 
 // Analyzer examines execution traces to detect defects.
 type Analyzer struct {
-	Store *Store
+	Store     *Store
+	MaxTraces int // 每次分析最大轨迹数（默认 100）
 }
 
 // Edge case thresholds.
@@ -33,7 +34,12 @@ type AnalyzeResult struct {
 func (a *Analyzer) Analyze() (*AnalyzeResult, error) {
 	result := &AnalyzeResult{}
 
-	traces, err := a.Store.GetUnanalyzedTraces(100)
+	limit := a.MaxTraces
+	if limit <= 0 {
+		limit = 100
+	}
+
+	traces, err := a.Store.GetUnanalyzedTraces(limit)
 	if err != nil {
 		return nil, fmt.Errorf("get unanalyzed traces: %w", err)
 	}

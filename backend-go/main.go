@@ -216,6 +216,7 @@ func main() {
 		}
 		evolutionTracker = evolution.NewTracker(evolutionStore)
 		evolutionAnalyzer = evolution.NewAnalyzer(evolutionStore)
+		evolutionAnalyzer.MaxTraces = envCfg.EvolutionMaxTraces
 		evolutionAuditor = evolution.NewAuditor(evolutionStore)
 		evolutionPatcher = evolution.NewPatcher(evolutionStore, evolutionAuditor)
 				log.Printf("[Evolution-Init] 自进化系统已初始化 (db: %s)", evoCfg.DBPath)
@@ -662,7 +663,7 @@ func main() {
 	r.POST("/:routePrefix/v1beta/models/*modelAction", geminiHandler)
 
 	// 代理端点 - Chat Completions API (OpenAI 兼容)
-	chatHandler := chat.Handler(envCfg, cfgManager, channelScheduler, memoryInjector)
+	chatHandler := chat.Handler(envCfg, cfgManager, channelScheduler, memoryInjector, evolutionTracker)
 	r.POST("/v1/chat/completions", chatHandler)
 	r.POST("/:routePrefix/v1/chat/completions", chatHandler)
 
