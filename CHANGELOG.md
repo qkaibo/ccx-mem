@@ -1,3 +1,16 @@
+## [v2.8.20] - 2026-05-31
+
+### 新增
+
+- **记忆子系统（Memory）** — 会话间持久记忆，分层存储（core/indexed），FTS5 全文检索，chat handler 请求注入，REST API（`/api/v2/memories`），后台 dreaming 自动提取记忆
+- **自进化子系统（Self-Evolution）** — 执行轨迹分析发现缺陷，9 条审计规则（SkillEvolver 移植），补丁式 prompt 更新，后台进化循环，REST API（`/api/v2/evolution`）
+
+### 技术细节
+
+- 全 Go 实现，零外部服务依赖（SQLite + FTS5）
+- 23 个单元测试全部通过
+- 配置节 `memory` / `evolution` 加入 `config.json`
+
 ## [v2.8.19] - 2026-05-30
 
 ### 修复
