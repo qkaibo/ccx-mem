@@ -4,7 +4,7 @@ GREEN=\033[0;32m
 YELLOW=\033[0;33m
 NC=\033[0m
 
-.PHONY: help install dev run build clean frontend-dev frontend-build embed-frontend desktop-dev desktop-build
+.PHONY: help install dev run build clean frontend-dev frontend-build embed-frontend desktop-dev desktop-build test test-all lint docker-build
 
 help:
 	@echo "$(GREEN)CCX - 可用命令:$(NC)"
@@ -84,3 +84,19 @@ frontend-dev:
 
 frontend-build:
 	@cd frontend && bun run build
+
+# --- 测试 ---
+test:
+	@cd backend-go && $(MAKE) test
+
+test-all:
+	@cd backend-go && $(MAKE) test-cover
+
+lint:
+	@cd backend-go && $(MAKE) lint
+
+# --- Docker ---
+docker-build:
+	@echo "$(GREEN)🐳 构建 Docker 镜像...$(NC)"
+	@docker build -t ccx-mem:latest .
+	@echo "$(GREEN)✅ Docker 镜像构建完成: ccx-mem:latest$(NC)"

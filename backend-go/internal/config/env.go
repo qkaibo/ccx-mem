@@ -27,6 +27,13 @@ type EnvConfig struct {
 	MemoryMaxCore     int // 核心记忆最大注入数（默认 3）
 	MemoryMaxIndexed  int // 索引记忆最大检索数（默认 5）
 
+	// Evolution 配置
+	EvolutionEnabled          bool
+	EvolutionDBPath           string
+	EvolutionAnalysisInterval int  // 分析间隔（分钟，默认 60）
+	EvolutionMaxTraces        int  // 每次分析最大轨迹数（默认 100）
+	EvolutionAutoApply        bool // 是否自动应用补丁（默认 false）
+
 	RequestTimeout     int
 	MaxRequestBodySize int64 // 请求体最大大小 (字节)，由 MB 配置转换
 	EnableCORS         bool
@@ -78,6 +85,13 @@ func NewEnvConfig() *EnvConfig {
 		MemoryDBPath:     getEnv("MEMORY_DB_PATH", ".config/memory.db"),
 		MemoryMaxCore:    clampInt(getEnvAsInt("MEMORY_MAX_CORE", 3), 0, 10),
 		MemoryMaxIndexed: clampInt(getEnvAsInt("MEMORY_MAX_INDEXED", 5), 0, 20),
+
+		// Evolution 配置
+		EvolutionEnabled:          getEnv("EVOLUTION_ENABLED", "false") == "true",
+		EvolutionDBPath:           getEnv("EVOLUTION_DB_PATH", ".config/evolution.db"),
+		EvolutionAnalysisInterval: clampInt(getEnvAsInt("EVOLUTION_ANALYSIS_INTERVAL", 60), 1, 1440),
+		EvolutionMaxTraces:        clampInt(getEnvAsInt("EVOLUTION_MAX_TRACES", 100), 10, 10000),
+		EvolutionAutoApply:        getEnv("EVOLUTION_AUTO_APPLY", "false") == "true",
 
 		RequestTimeout:     getEnvAsInt("REQUEST_TIMEOUT", 300000),
 		MaxRequestBodySize: getEnvAsInt64("MAX_REQUEST_BODY_SIZE_MB", 50) * 1024 * 1024, // MB 转换为字节

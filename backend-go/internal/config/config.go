@@ -199,6 +199,30 @@ type Config struct {
 
 	// 熔断器运行时配置（可选，nil 使用环境变量或代码默认值）
 	CircuitBreaker *CircuitBreakerConfig `json:"circuitBreaker,omitempty"`
+
+	// Memory 记忆系统配置（ccx-mem）
+	Memory *MemoryConfig `json:"memory,omitempty"`
+
+	// Evolution 自进化系统配置（ccx-mem）
+	Evolution *EvolutionConfig `json:"evolution,omitempty"`
+}
+
+// MemoryConfig 记忆系统配置
+type MemoryConfig struct {
+	Enabled           bool   `json:"enabled"`
+	MaxPerRequest     int    `json:"maxPerRequest"`
+	Strategy          string `json:"strategy"`
+	MaxCoreMemories   int    `json:"maxCoreMemories"`
+	MaxIndexedMemories int   `json:"maxIndexedMemories"`
+}
+
+// EvolutionConfig 自进化系统配置
+type EvolutionConfig struct {
+	Enabled           bool `json:"enabled"`
+	AnalysisInterval  int  `json:"analysisInterval"`
+	MaxTracesPerCycle int  `json:"maxTracesPerCycle"`
+	AutoApplyPatches  bool `json:"autoApplyPatches"`
+	RequireAudit      bool `json:"requireAudit"`
 }
 
 // FailedKey 失败密钥记录

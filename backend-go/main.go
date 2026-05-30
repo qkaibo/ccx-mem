@@ -22,6 +22,7 @@ import (
 	"github.com/BenedictKing/ccx/internal/handlers/responses"
 	"github.com/BenedictKing/ccx/internal/logger"
 	"github.com/BenedictKing/ccx/internal/memory"
+	"github.com/BenedictKing/ccx/internal/evolution"
 	"github.com/BenedictKing/ccx/internal/metrics"
 	"github.com/BenedictKing/ccx/internal/middleware"
 	"github.com/BenedictKing/ccx/internal/scheduler"
@@ -195,6 +196,75 @@ func main() {
 		}
 	} else {
 		log.Printf("[Memory-Init] 记忆功能已禁用 (MEMORY_ENABLED=false)")
+	}
+
+	// Evolution 子系统初始化（ccx-mem）
+	var evolutionStore *evolution.Store
+	var evolutionTracker *evolution.Tracker
+	var evolutionAnalyzer *evolution.Analyzer
+	var evolutionAuditor *evolution.Auditor
+	var evolutionPatcher *evolution.Patcher
+	if envCfg.EvolutionEnabled {
+		evoCfg := &evolution.StoreConfig{DBPath: envCfg.EvolutionDBPath}
+		if evoCfg.DBPath == "" {
+			evoCfg.DBPath = ".config/evolution.db"
+		}
+		var initErr error
+		evolutionStore, initErr = evolution.NewStore(evoCfg)
+		if initErr != nil {
+			log.Fatalf("[Evolution-Init] 初始化数据库失败: %v", initErr)
+		}
+		evolutionTracker = evolution.NewTracker(evolutionStore)
+		evolutionAnalyzer = evolution.NewAnalyzer(evolutionStore)
+		evolutionAuditor = evolution.NewAuditor(evolutionStore)
+		evolutionPatcher = evolution.NewPatcher(evolutionStore, evolutionAuditor)
+				log.Printf("[Evolution-Init] 自进化系统已初始化 (db: %s)", evoCfg.DBPath)
+
+					// 启动自进化分析循环（后台 goroutine）
+						go func() {
+							interval := time.Duration(envCfg.EvolutionAnalysisInterval) * time.Minute
+							ticker := time.NewTicker(interval)
+							defer ticker.Stop()
+							log.Printf("[Evolution-Loop] 自进化分析循环已启动 (间隔: %v)", interval)
+
+							for range ticker.C {
+								result, analyzeErr := evolutionAnalyzer.Analyze()
+								if analyzeErr != nil {
+									log.Printf("[Evolution-Loop] 轨迹分析失败: %v", analyzeErr)
+									continue
+								}
+								if result.DefectsCreated == 0 {
+									log.Printf("[Evolution-Loop] 分析完成: %s", result.Summary)
+									continue
+								}
+								log.Printf("[Evolution-Loop] %s", result.Summary)
+
+								for _, defectID := range result.DefectIDs {
+									defect, getErr := evolutionStore.GetDefect(defectID)
+									if getErr != nil || defect == nil {
+										log.Printf("[Evolution-Loop] 获取缺陷失败: id=%d, err=%v", defectID, getErr)
+										continue
+									}
+									patch, patchErr := evolutionPatcher.GeneratePatchFromAnalysis(defect)
+									if patchErr != nil {
+										log.Printf("[Evolution-Loop] 补丁生成失败: %v", patchErr)
+										continue
+									}
+									log.Printf("[Evolution-Loop] 补丁已生成: prompt=%d, reason=%s", patch.PromptID, patch.Reason)
+									if !envCfg.EvolutionAutoApply {
+										log.Printf("[Evolution-Loop] 跳过自动应用 (autoApply=false)")
+										continue
+									}
+									if applyErr := evolutionPatcher.ApplyPatch(patch, true); applyErr != nil {
+										log.Printf("[Evolution-Loop] 补丁应用失败: %v", applyErr)
+									} else {
+										log.Printf("[Evolution-Loop] 补丁已自动应用: prompt=%d v=%s", patch.PromptID, patch.NewVersion)
+									}
+								}
+							}
+						}()
+	} else {
+		log.Printf("[Evolution-Init] 自进化功能已禁用 (EVOLUTION_ENABLED=false)")
 	}
 
 	scheduledRecoveryStop := make(chan struct{})
@@ -504,6 +574,19 @@ func main() {
 			log.Printf("[Memory-API] 记忆 API 已注册 (/api/v2/memories)")
 		}
 
+		// Evolution API（ccx-mem）
+		if evolutionStore != nil {
+			evoDeps := &evolution.APIDeps{
+				Store:    evolutionStore,
+				Tracker:  evolutionTracker,
+				Analyzer: evolutionAnalyzer,
+				Auditor:  evolutionAuditor,
+				Patcher:  evolutionPatcher,
+			}
+			evolution.SetupRoutes(apiGroup, evoDeps)
+			log.Printf("[Evolution-API] 自进化 API 已注册 (/api/v2/evolution)")
+		}
+
 		// Fuzzy 模式设置
 		apiGroup.GET("/settings/fuzzy-mode", handlers.GetFuzzyMode(cfgManager))
 		apiGroup.PUT("/settings/fuzzy-mode", handlers.SetFuzzyMode(cfgManager))
@@ -693,6 +776,15 @@ func main() {
 				log.Printf("[Memory-Shutdown] 警告: 关闭记忆存储时发生错误: %v", err)
 			} else {
 				log.Println("[Memory-Shutdown] 记忆存储已安全关闭")
+			}
+		}
+
+		// 关闭自进化存储
+		if evolutionStore != nil {
+			if err := evolutionStore.Close(); err != nil {
+				log.Printf("[Evolution-Shutdown] 警告: 关闭自进化存储时发生错误: %v", err)
+			} else {
+				log.Println("[Evolution-Shutdown] 自进化存储已安全关闭")
 			}
 		}
 
