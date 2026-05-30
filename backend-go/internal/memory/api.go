@@ -14,6 +14,7 @@ import (
 type MemoryAPIDeps struct {
 	Store        *Store
 	Injector     *Injector
+	Dreamer      *Dreamer
 	EnvCfg       *config.EnvConfig
 }
 
@@ -26,6 +27,7 @@ func SetupRoutes(r gin.IRouter, deps *MemoryAPIDeps) {
 		g.GET("/:id", getMemory(deps))
 		g.PUT("/:id", updateMemory(deps))
 		g.DELETE("/:id", deleteMemory(deps))
+		g.POST("/_dream", triggerDream(deps))
 	}
 }
 
@@ -213,5 +215,23 @@ func parseID(c *gin.Context) (int64, error) {
 func (deps *MemoryAPIDeps) log(op string, err error) {
 	if deps.EnvCfg != nil && deps.EnvCfg.EnableRequestLogs {
 		fmt.Printf("[Memory-API] %s: %v\n", op, err)
+	}
+}
+
+// triggerDream 手动触发梦境提取
+func triggerDream(deps *MemoryAPIDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if deps.Dreamer == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "dreamer is not configured"})
+			return
+		}
+
+		count, err := deps.Dreamer.DreamOnce()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"memories_created": count})
 	}
 }

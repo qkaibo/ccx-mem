@@ -204,6 +204,9 @@ func main() {
 	var evolutionAnalyzer *evolution.Analyzer
 	var evolutionAuditor *evolution.Auditor
 	var evolutionPatcher *evolution.Patcher
+	var subsystemCancel context.CancelFunc
+	var subsystemCtx context.Context
+	var memoryDreamer *memory.Dreamer
 	if envCfg.EvolutionEnabled {
 		evoCfg := &evolution.StoreConfig{DBPath: envCfg.EvolutionDBPath}
 		if evoCfg.DBPath == "" {
@@ -221,49 +224,22 @@ func main() {
 		evolutionPatcher = evolution.NewPatcher(evolutionStore, evolutionAuditor)
 				log.Printf("[Evolution-Init] 自进化系统已初始化 (db: %s)", evoCfg.DBPath)
 
-					// 启动自进化分析循环（后台 goroutine）
-						go func() {
-							interval := time.Duration(envCfg.EvolutionAnalysisInterval) * time.Minute
-							ticker := time.NewTicker(interval)
-							defer ticker.Stop()
-							log.Printf("[Evolution-Loop] 自进化分析循环已启动 (间隔: %v)", interval)
+				// 创建子系统上下文（用于优雅关闭内存/进化后台 goroutine）
+				subsystemCtx, subsystemCancel = context.WithCancel(context.Background())
 
-							for range ticker.C {
-								result, analyzeErr := evolutionAnalyzer.Analyze()
-								if analyzeErr != nil {
-									log.Printf("[Evolution-Loop] 轨迹分析失败: %v", analyzeErr)
-									continue
-								}
-								if result.DefectsCreated == 0 {
-									log.Printf("[Evolution-Loop] 分析完成: %s", result.Summary)
-									continue
-								}
-								log.Printf("[Evolution-Loop] %s", result.Summary)
+				// 启动自进化分析循环
+				go evolution.RunLoop(subsystemCtx, evolution.LoopConfig{
+					Interval:  time.Duration(envCfg.EvolutionAnalysisInterval) * time.Minute,
+					AutoApply: envCfg.EvolutionAutoApply,
+				}, evolutionAnalyzer, evolutionStore, evolutionPatcher)
 
-								for _, defectID := range result.DefectIDs {
-									defect, getErr := evolutionStore.GetDefect(defectID)
-									if getErr != nil || defect == nil {
-										log.Printf("[Evolution-Loop] 获取缺陷失败: id=%d, err=%v", defectID, getErr)
-										continue
-									}
-									patch, patchErr := evolutionPatcher.GeneratePatchFromAnalysis(defect)
-									if patchErr != nil {
-										log.Printf("[Evolution-Loop] 补丁生成失败: %v", patchErr)
-										continue
-									}
-									log.Printf("[Evolution-Loop] 补丁已生成: prompt=%d, reason=%s", patch.PromptID, patch.Reason)
-									if !envCfg.EvolutionAutoApply {
-										log.Printf("[Evolution-Loop] 跳过自动应用 (autoApply=false)")
-										continue
-									}
-									if applyErr := evolutionPatcher.ApplyPatch(patch, true); applyErr != nil {
-										log.Printf("[Evolution-Loop] 补丁应用失败: %v", applyErr)
-									} else {
-										log.Printf("[Evolution-Loop] 补丁已自动应用: prompt=%d v=%s", patch.PromptID, patch.NewVersion)
-									}
-								}
-							}
-						}()
+				// 启动梦境提取器（后台自动从执行轨迹提取记忆）
+				if memoryStore != nil {
+					memoryDreamer = memory.NewDreamer(evolutionTracker, memoryStore, &memory.DreamerConfig{
+						MaxTraces: envCfg.EvolutionMaxTraces,
+					})
+					go memoryDreamer.Run(subsystemCtx, 30*time.Minute)
+				}
 	} else {
 		log.Printf("[Evolution-Init] 自进化功能已禁用 (EVOLUTION_ENABLED=false)")
 	}
@@ -569,6 +545,7 @@ func main() {
 			memDeps := &memory.MemoryAPIDeps{
 				Store:        memoryStore,
 				Injector:     memoryInjector,
+				Dreamer:      memoryDreamer,
 				EnvCfg:       envCfg,
 			}
 			memory.SetupRoutes(apiGroup, memDeps)
@@ -751,6 +728,11 @@ func main() {
 		signal.Stop(sigChan) // 停止信号监听，避免资源泄漏
 
 		log.Println("[Server-Shutdown] 收到关闭信号，正在优雅关闭服务器...")
+
+		// 停止内存/进化后台 goroutine
+		if subsystemCancel != nil {
+			subsystemCancel()
+		}
 
 		// 创建超时上下文
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
