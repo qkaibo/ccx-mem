@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CCX-MEM 架构图</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #f0f4f8; font-family: 'Noto Sans SC', sans-serif; color: #1a202c; padding: 32px; }
+
+.header { text-align: center; margin-bottom: 32px; }
+.header h1 { font-size: 28px; font-weight: 700; color: #1a202c; }
+.header .subtitle { font-size: 14px; color: #718096; margin-top: 6px; }
+.header .badge { display: inline-block; background: #ebf8ff; color: #2b6cb0;
+  font-size: 11px; padding: 2px 10px; border-radius: 10px; margin: 0 4px;
+  border: 1px solid #bee3f8; }
+
+.layer { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
+  padding: 20px; margin-bottom: 20px; position: relative; }
+.layer-title { font-size: 16px; font-weight: 700; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px; }
+.layer-title .icon { width: 8px; height: 8px; border-radius: 50%;
+  display: inline-block; }
+
+.mod { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 14px; transition: box-shadow .2s; }
+.mod:hover { box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+.mod-name { font-family: 'JetBrains Mono', monospace; font-size: 13px;
+  font-weight: 600; color: #2d3748; margin-bottom: 4px; }
+.mod-desc { font-size: 12px; color: #4a5568; line-height: 1.5; margin-bottom: 6px; }
+.mod-files { font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: #a0aec0; line-height: 1.4; }
+
+.kp { display: inline-block; background: #ebf8ff; color: #2b6cb0;
+  font-size: 10px; padding: 1px 7px; border-radius: 6px; margin: 2px 2px 2px 0;
+  border: 1px solid #bee3f8; font-family: 'JetBrains Mono', monospace; }
+.kp-green { background: #f0fff4; color: #276749; border-color: #c6f6d5; }
+.kp-amber { background: #fffbeb; color: #92400e; border-color: #fef3c7; }
+.kp-purple { background: #faf5ff; color: #553c9a; border-color: #e9d8fd; }
+.kp-red { background: #fff5f5; color: #c53030; border-color: #fed7d7; }
+
+.modules { display: grid; gap: 12px; }
+.g2 { grid-template-columns: 1fr 1fr; }
+.g3 { grid-template-columns: 1fr 1fr 1fr; }
+.g4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+.flow { text-align: center; padding: 6px 0; color: #718096; font-size: 13px; }
+.flow svg { vertical-align: middle; margin-right: 4px; }
+
+.dataflow { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+  padding: 20px; margin-top: 20px; }
+.dataflow h3 { font-size: 16px; font-weight: 700; margin-bottom: 14px; color: #1a202c; }
+.df-step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.df-num { min-width: 28px; height: 28px; background: #2b6cb0; color: #fff;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.df-text { font-size: 12px; color: #4a5568; line-height: 1.5; padding-top: 4px; }
+.df-text code { background: #edf2f7; padding: 1px 5px; border-radius: 3px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+
+.summary-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; margin-top: 24px; }
+.summary-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; }
+.summary-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+.summary-card ul { list-style: none; padding: 0; }
+.summary-card li { font-size: 12px; color: #4a5568; padding: 3px 0;
+  border-bottom: 1px solid #f0f4f8; }
+.summary-card li:last-child { border-bottom: none; }
+
+.footer { text-align: center; margin-top: 32px; font-size: 11px; color: #a0aec0; }
+
+.storage { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+  padding: 20px; margin-bottom: 20px; }
+.storage h3 { font-size: 16px; font-weight: 700; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px; }
+.storage .tables { font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: #4a5568; line-height: 2; }
+.storage .tables span { display: inline-block; background: #f7fafc;
+  border: 1px solid #e2e8f0; border-radius: 4px; padding: 1px 8px; margin: 2px 4px 2px 0; }
+
+.side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🧠 CCX-MEM 架构</h1>
+  <div class="subtitle">CCX Memory &amp; Self-Evolution Subsystem · Phase 0–4 · Go 1.21+ · 1,554 行新增代码</div>
+  <div style="margin-top:8px">
+    <span class="badge">Go</span>
+    <span class="badge">SQLite + FTS5</span>
+    <span class="badge">Gin</span>
+    <span class="badge">OpenViking</span>
+    <span class="badge">39 tests ✓</span>
+  </div>
+</div>
+
+<!-- Layer 5: External LLM -->
+<div class="layer">
+  <div class="layer-title">
+    <span class="icon" style="background:#6366f1"></span>
+    第 5 层 · 外部 LLM 供应商
+    <span style="font-size:12px;color:#718096;font-weight:400">— 上游 AI 服务</span>
+  </div>
+  <div class="modules g4">
+    <div class="mod">
+      <div class="mod-name">Claude</div>
+      <div class="mod-desc">Anthropic Claude 系列模型</div>
+      <div><span class="kp">Provider</span></div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">DeepSeek</div>
+      <div class="mod-desc">DeepSeek V3 / V4 系列</div>
+      <div><span class="kp">Provider</span></div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">OpenAI</div>
+      <div class="mod-desc">GPT-4o / o1 系列</div>
+      <div><span class="kp">Provider</span></div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">MiMo</div>
+      <div class="mod-desc">MiMo v2.5 系列</div>
+      <div><span class="kp kp-amber">fragile</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="flow">
+  <svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 4 L10 16 M6 12 L10 16 L14 12" stroke="#718096" stroke-width="1.5" fill="none"/></svg>
+  HTTPS / SSE 流式请求
+</div>
+
+<!-- Layer 4: CCX Core -->
+<div class="layer">
+  <div class="layer-title">
+    <span class="icon" style="background:#10b981"></span>
+    第 4 层 · CCX Reverse Proxy Core
+    <span style="font-size:12px;color:#718096;font-weight:400">— 核心代理引擎，对客户端透明</span>
+  </div>
+  <div class="modules g4">
+    <div class="mod">
+      <div class="mod-name">router</div>
+      <div class="mod-desc">请求路由与负载均衡</div>
+      <div class="mod-files">ccx/internal/router/</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">queue</div>
+      <div class="mod-desc">并发请求队列管理</div>
+      <div class="mod-files">ccx/internal/queue/</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">chatUpstream</div>
+      <div class="mod-desc">上游模型选择与映射</div>
+      <div><span class="kp">modelMapping</span></div>
+      <div class="mod-files">ccx/internal/handler/</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">memoryInjector</div>
+      <div class="mod-desc">请求前注入记忆上下文</div>
+      <div><span class="kp">intercept</span></div>
+      <div class="mod-files">ccx-mem/backend-go/internal/memory/</div>
+    </div>
+  </div>
+</div>
+
+<div class="flow">
+  <svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 4 L10 16 M6 12 L10 16 L14 12" stroke="#718096" stroke-width="1.5" fill="none"/></svg>
+  内部调用 / 定时触发
+</div>
+
+<!-- Layer 3: Memory Subsystem -->
+<div class="layer">
+  <div class="layer-title">
+    <span class="icon" style="background:#f59e0b"></span>
+    第 3 层 · 记忆子系统（Phase 1–2）
+    <span style="font-size:12px;color:#718096;font-weight:400">— 持久化上下文 + 主动学习</span>
+  </div>
+  <div class="modules g3">
+    <div class="mod">
+      <div class="mod-name">MemoryInjector</div>
+      <div class="mod-desc">在 LLM 请求前注入相关记忆与 Skill 到 system prompt</div>
+      <div>
+        <span class="kp">inject</span>
+        <span class="kp">FTS5 search</span>
+        <span class="kp">skill templates</span>
+      </div>
+      <div class="mod-files">backend-go/internal/memory/injector.go</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">Dreaming</div>
+      <div class="mod-desc">后台异步整理对话摘要，发现新模式和关联</div>
+      <div>
+        <span class="kp">summarize</span>
+        <span class="kp">pattern</span>
+        <span class="kp">associate</span>
+      </div>
+      <div class="mod-files">backend-go/internal/memory/dreaming.go</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">Execution Traces</div>
+      <div class="mod-desc">记录每次 prompt 执行的延迟/成功率，为自进化提供数据</div>
+      <div>
+        <span class="kp">latency</span>
+        <span class="kp">success_rate</span>
+        <span class="kp">token_usage</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/store.go</div>
+    </div>
+  </div>
+</div>
+
+<div class="flow">
+  <svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 4 L10 16 M6 12 L10 16 L14 12" stroke="#718096" stroke-width="1.5" fill="none"/></svg>
+  定时循环（60 min）: Analyze → Publish → Patch → Audit → Apply
+</div>
+
+<!-- Layer 2: Self-Evolution -->
+<div class="layer">
+  <div class="layer-title">
+    <span class="icon" style="background:#ec4899"></span>
+    第 2 层 · 自进化子系统（Phase 2–4）
+    <span style="font-size:12px;color:#718096;font-weight:400">— 发现缺陷 → 生成补丁 → 审计 → 自动应用</span>
+  </div>
+  <div class="modules g4">
+    <div class="mod">
+      <div class="mod-name">Analyzer</div>
+      <div class="mod-desc">扫描 traces 发现性能退化/一致性问题/幻觉</div>
+      <div>
+        <span class="kp">latency>5s</span>
+        <span class="kp">inconsistency</span>
+        <span class="kp kp-red">hallucination</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/analyzer.go</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">Patcher</div>
+      <div class="mod-desc">根据 defect 自动生成 Prompt 补丁</div>
+      <div>
+        <span class="kp">diff</span>
+        <span class="kp">auto_apply</span>
+        <span class="kp">versioning</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/patcher.go</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">Auditor</div>
+      <div class="mod-desc">9 条审计规则检查新 Prompt 质量</div>
+      <div>
+        <span class="kp kp-green">9 rules</span>
+        <span class="kp">pass/fail</span>
+        <span class="kp kp-red">violations</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/auditor.go</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">Loop</div>
+      <div class="mod-desc">60min 定时器驱动进化循环，auto-publish 集成</div>
+      <div>
+        <span class="kp">ticker</span>
+        <span class="kp">auto publish</span>
+        <span class="kp-green">configurable</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/loop.go</div>
+    </div>
+  </div>
+</div>
+
+<div class="flow">
+  <svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 4 L10 16 M6 12 L10 16 L14 12" stroke="#718096" stroke-width="1.5" fill="none"/></svg>
+  Skill CRUD + Shared Learning API
+</div>
+
+<!-- Layer 1: Skill Self-Evolution -->
+<div class="layer">
+  <div class="layer-title">
+    <span class="icon" style="background:#8b5cf6"></span>
+    第 1 层 · Skill 自进化（Phase 4）
+    <span style="font-size:12px;color:#718096;font-weight:400">— Skill 模板管理 + 共享学习发布</span>
+  </div>
+  <div class="modules g3">
+    <div class="mod">
+      <div class="mod-name">Skills CRUD</div>
+      <div class="mod-desc">Prompt/Skill 模板的完整生命周期管理</div>
+      <div>
+        <span class="kp">name</span>
+        <span class="kp">content</span>
+        <span class="kp">version</span>
+        <span class="kp">tags</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/store.go</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">Shared Learning</div>
+      <div class="mod-desc">记录所有发布到 OpenViking 的事件，可查询追溯</div>
+      <div>
+        <span class="kp">defect_id</span>
+        <span class="kp">patch_id</span>
+        <span class="kp">audit_id</span>
+        <span class="kp-purple">resource_id</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/store.go</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">Audit Logs</div>
+      <div class="mod-desc">审计结果持久化存储，记录 9 条规则通过/失败状态</div>
+      <div>
+        <span class="kp kp-green">9 rules</span>
+        <span class="kp">passed/failed</span>
+        <span class="kp">violation_details</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/store.go</div>
+    </div>
+  </div>
+</div>
+
+<div class="flow">
+  <svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 4 L10 16 M6 12 L10 16 L14 12" stroke="#718096" stroke-width="1.5" fill="none"/></svg>
+  HTTP POST: temp_upload → add_resource
+</div>
+
+<!-- OpenViking Publisher -->
+<div class="layer">
+  <div class="layer-title">
+    <span class="icon" style="background:#6366f1"></span>
+    OpenViking Publisher
+    <span style="font-size:12px;color:#718096;font-weight:400">— 自进化事件自动发布到共享知识库</span>
+  </div>
+  <div class="modules g3">
+    <div class="mod">
+      <div class="mod-name">PublishDefect</div>
+      <div class="mod-desc">发布缺陷报告到 OpenViking</div>
+      <div>
+        <span class="kp">POST temp_upload</span>
+        <span class="kp">POST add_resource</span>
+        <span class="kp-purple">external</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/publisher.go</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">PublishPatch</div>
+      <div class="mod-desc">发布补丁（新旧版本 diff）到 OpenViking</div>
+      <div>
+        <span class="kp">Markdown</span>
+        <span class="kp">old_vs_new</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/publisher.go</div>
+    </div>
+    <div class="mod">
+      <div class="mod-name">PublishAudit</div>
+      <div class="mod-desc">发布审计结果到 OpenViking（规则通过/失败明细）</div>
+      <div>
+        <span class="kp kp-green">pass_rate</span>
+        <span class="kp kp-red">violations</span>
+      </div>
+      <div class="mod-files">backend-go/internal/evolution/publisher.go</div>
+    </div>
+  </div>
+</div>
+
+<!-- SQLite Storage -->
+<div class="storage">
+  <h3>
+    <span class="icon" style="background:#64748b"></span>
+    SQLite 存储 · 8 张表
+  </h3>
+  <div class="tables">
+    <span>conversations</span>
+    <span>messages</span>
+    <span style="background:#ebf8ff;border-color:#bee3f8">execution_traces</span>
+    <span style="background:#f0fff4;border-color:#c6f6d5">prompts</span>
+    <span style="background:#fffbeb;border-color:#fef3c7">defects</span>
+    <span style="background:#fff5f5;border-color:#fed7d7">patches</span>
+    <span style="background:#faf5ff;border-color:#e9d8fd">skills</span>
+    <span style="background:#faf5ff;border-color:#e9d8fd">shared_learning</span>
+    <span style="background:#faf5ff;border-color:#e9d8fd">audit_logs</span>
+  </div>
+  <div style="font-size:11px;color:#a0aec0;margin-top:10px;font-family:'JetBrains Mono',monospace">
+    <span style="color:#718096">Phase 1</span>: conversations, messages · 
+    <span style="color:#2b6cb0">Phase 2</span>: execution_traces, prompts, defects, patches · 
+    <span style="color:#553c9a">Phase 4</span>: skills, shared_learning, audit_logs
+  </div>
+</div>
+
+<!-- API Routes -->
+<div class="dataflow" style="margin-top:0;margin-bottom:20px">
+  <h3>🔌 API 路由（Gin Framework）</h3>
+  <div class="side-by-side">
+    <div>
+      <div class="df-step">
+        <div class="df-num" style="background:#2b6cb0">M</div>
+        <div class="df-text"><code>POST/GET/DELETE /v2/memory</code> — Memory CRUD + search</div>
+      </div>
+      <div class="df-step">
+        <div class="df-num" style="background:#f59e0b">E</div>
+        <div class="df-text"><code>GET /v2/evolution/traces</code> — 查询执行痕迹</div>
+      </div>
+      <div class="df-step">
+        <div class="df-num" style="background:#ec4899">D</div>
+        <div class="df-text"><code>GET /v2/evolution/defects</code> — 查询缺陷列表</div>
+      </div>
+      <div class="df-step">
+        <div class="df-num" style="background:#ec4899">P</div>
+        <div class="df-text"><code>GET /v2/evolution/patches</code> — 查询补丁历史</div>
+      </div>
+    </div>
+    <div>
+      <div class="df-step">
+        <div class="df-num" style="background:#8b5cf6">S</div>
+        <div class="df-text"><code>GET/POST/PUT/DELETE /v2/evolution/skills</code> — Skill CRUD</div>
+      </div>
+      <div class="df-step">
+        <div class="df-num" style="background:#8b5cf6">SL</div>
+        <div class="df-text"><code>GET /v2/evolution/shared-learning</code> — 共享学习查询</div>
+      </div>
+      <div class="df-step">
+        <div class="df-num" style="background:#6366f1">OV</div>
+        <div class="df-text"><code>POST /v2/evolution/publish/*</code> — 手动发布到 OpenViking</div>
+      </div>
+      <div class="df-step">
+        <div class="df-num" style="background:#6366f1">SR</div>
+        <div class="df-text"><code>POST /v2/evolution/search</code> — 搜索 OpenViking 知识库</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Key Data Flows -->
+<div class="dataflow">
+  <h3>🔑 关键数据流</h3>
+  <div class="df-step">
+    <div class="df-num">1</div>
+    <div class="df-text">用户发送 <code>/chat/completions</code> → CCX 路由到上游 LLM，同时 <code>MemoryInjector</code> 插入 FTS5 检索到的相关记忆到 system prompt</div>
+  </div>
+  <div class="df-step">
+    <div class="df-num">2</div>
+    <div class="df-text">LLM 返回响应 → 异步记录 <code>ExecutionTrace</code>（延迟、成功率、token 用量）</div>
+  </div>
+  <div class="df-step">
+    <div class="df-num">3</div>
+    <div class="df-text"><code>Dreaming</code> 后台任务定期整理对话摘要，提取模式和关联 → 写入 <code>conversations</code> 表</div>
+  </div>
+  <div class="df-step">
+    <div class="df-num">4</div>
+    <div class="df-text"><code>Loop</code>（60min）→ <code>Analyzer</code> 扫描 traces 发现缺陷 → <code>Publisher.PublishDefect</code> 推到 OpenViking</div>
+  </div>
+  <div class="df-step">
+    <div class="df-num">5</div>
+    <div class="df-text"><code>Patcher</code> 根据缺陷生成 Prompt 补丁 → <code>Auditor</code> 9 条规则检查 → <code>Publisher.PublishPatch</code> + <code>PublishAudit</code> 推到 OpenViking</div>
+  </div>
+  <div class="df-step">
+    <div class="df-num">6</div>
+    <div class="df-text">其他 CCX 实例可通过 <code>POST /v2/evolution/search</code> 搜索 OpenViking 知识库，获取共享的进化经验</div>
+  </div>
+</div>
+
+<!-- Summary -->
+<div class="summary-grid">
+  <div class="summary-card">
+    <h3>📦 Go 包</h3>
+    <ul>
+      <li><code>internal/memory</code> — 记忆子系统</li>
+      <li><code>internal/evolution</code> — 自进化引擎</li>
+      <li><code>internal/api</code> — Gin 路由</li>
+      <li><code>cmd/ccx</code> — 入口</li>
+    </ul>
+  </div>
+  <div class="summary-card">
+    <h3>🔧 核心文件</h3>
+    <ul>
+      <li><code>store.go</code> — 8 表 CRUD</li>
+      <li><code>publisher.go</code> — OpenViking 发布</li>
+      <li><code>api.go</code> — HTTP 路由注册</li>
+      <li><code>loop.go</code> — 定时进化循环</li>
+    </ul>
+  </div>
+  <div class="summary-card">
+    <h3>✅ 测试覆盖</h3>
+    <ul>
+      <li>Phase 1-3: 23 tests (store)</li>
+      <li>Phase 4: 11 tests (store)</li>
+      <li>Phase 4: 10 tests (publisher)</li>
+      <li>Phase 4: 10 tests (api)</li>
+    </ul>
+  </div>
+  <div class="summary-card">
+    <h3>⚙️ 配置开关</h3>
+    <ul>
+      <li><code>memory.enabled</code> — 记忆注入</li>
+      <li><code>evolution.enabled</code> — 自进化循环</li>
+      <li><code>OPENVIKING_ENABLED</code> — 共享发布</li>
+      <li><code>OPENVIKING_ENDPOINT</code> — KB 地址</li>
+    </ul>
+  </div>
+</div>
+
+<div class="footer">
+  ccx-mem · Architecture v1.0 · 2026-05-31 · 39 tests all green
+</div>
+
+</body>
+</html>

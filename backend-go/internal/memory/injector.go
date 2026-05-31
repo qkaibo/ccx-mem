@@ -64,6 +64,18 @@ func (inj *Injector) Inject(bodyBytes []byte, userID string, enableLogs bool) ([
 			}
 			indexedMemories = nil
 		}
+		// 过滤掉已是核心记忆的记录（避免重复注入）
+		coreIDs := make(map[int64]bool)
+		for _, m := range coreMemories {
+			coreIDs[m.ID] = true
+		}
+		filtered := indexedMemories[:0]
+		for _, m := range indexedMemories {
+			if !coreIDs[m.ID] && m.Layer != "core" {
+				filtered = append(filtered, m)
+			}
+		}
+		indexedMemories = filtered
 	}
 
 	// 如果两样都没有，不修改

@@ -299,8 +299,14 @@ func (s *Store) BumpAccessCount(id int64) {
 //  FTS5 全文检索
 // ==========================================
 
-// SearchMemories 内容 LIKE 检索 + 标签匹配 + 热度加权
-// 返回匹配的记忆，按 access_count DESC 排序（检索频率越高越靠前）。
+// SearchMemories 内容 LIKE 检索 + 标签匹配 + 热度加权。
+//
+// 检索策略（三步）：
+//  1. 用 ExtractKeywords 提取关键词（CJK bigram + 英文词 + 停用词过滤）
+//  2. AND 检索（所有关键词必须命中 content）—— 高精度
+//  3. 若 AND 零结果，降级为 OR 检索（任一关键词命中即可）—— 高召回
+//     OR 结果按命中率打分，低于 30% 的被过滤（控制噪音）
+//
 // 设计决策：使用 LIKE 而非 FTS5，因为 FTS5 不支持 CJK 分词。
 // 对于记忆存储这种小数据集（通常 < 10K 条），LIKE 搜索性能足够。
 func (s *Store) SearchMemories(userID, query string, maxResults int) ([]MemoryRecord, error) {
@@ -308,25 +314,57 @@ func (s *Store) SearchMemories(userID, query string, maxResults int) ([]MemoryRe
 		maxResults = 5
 	}
 
-	words := strings.Fields(query)
+	// 使用 ExtractKeywords 获取优质关键词（CJK bigram + 英文词 + 停用词过滤）
+	words := ExtractKeywords(query, 5)
 	if len(words) == 0 {
 		return nil, nil
 	}
 
-	// 只对前 3 个关键词做检索
-	wordLimit := 3
-	if len(words) < wordLimit {
-		wordLimit = len(words)
+	// ── 第一步：AND 检索（高精度）──────────────────────────────
+	results := s.searchByAND(userID, words, maxResults)
+	if len(results) > 0 {
+		return results, nil
 	}
 
-	// 构建 WHERE 条件
+	// ── 第二步：OR 降级（高召回）+ 相关性阈值过滤 ──────────────
+	orResults := s.searchByOR(userID, words, maxResults)
+	if len(orResults) == 0 {
+		return nil, nil
+	}
+
+	// 相关性打分 & 过滤（命中率 ≥ 30%）
+	totalWords := len(words)
+	var scored []MemoryRecord
+	for _, m := range orResults {
+		hitCount := 0
+		lowerContent := strings.ToLower(m.Content)
+		for _, w := range words {
+			if strings.Contains(lowerContent, w) {
+				hitCount++
+			}
+		}
+		ratio := float64(hitCount) / float64(totalWords)
+		if ratio >= 0.3 {
+			scored = append(scored, m)
+		}
+	}
+
+	// 如果阈值过滤后为空，退回原始 OR 结果
+	if len(scored) == 0 {
+		return orResults, nil
+	}
+
+	return scored, nil
+}
+
+// searchByAND 所有关键词必须命中 content（AND 逻辑）
+func (s *Store) searchByAND(userID string, words []string, maxResults int) []MemoryRecord {
 	var conds []string
-	for range words[:wordLimit] {
+	for range words {
 		conds = append(conds, "content LIKE ?")
 	}
 	whereClause := strings.Join(conds, " AND ")
 
-	// 参数：每个词一个 pattern + user_id
 	sqlQuery := fmt.Sprintf(`
 		SELECT id, content, layer, user_id, tags, source, access_count, created_at, updated_at
 		FROM memories
@@ -335,15 +373,52 @@ func (s *Store) SearchMemories(userID, query string, maxResults int) ([]MemoryRe
 		LIMIT ?
 	`, whereClause)
 
-	var sqlArgs []interface{}
-	for _, w := range words[:wordLimit] {
-		sqlArgs = append(sqlArgs, "%"+w+"%")
+	var args []interface{}
+	for _, w := range words {
+		args = append(args, "%"+w+"%")
 	}
-	sqlArgs = append(sqlArgs, userID, maxResults)
+	args = append(args, userID, maxResults)
 
-	rows, err := s.db.Query(sqlQuery, sqlArgs...)
+	results := s.scanRows(sqlQuery, args, maxResults)
+
+	// 补充标签检索
+	results = s.appendTagResults(userID, words, maxResults, results)
+	return results
+}
+
+// searchByOR 任一关键词命中 content 即可（OR 逻辑）
+func (s *Store) searchByOR(userID string, words []string, maxResults int) []MemoryRecord {
+	var conds []string
+	for range words {
+		conds = append(conds, "content LIKE ?")
+	}
+	whereClause := strings.Join(conds, " OR ")
+
+	sqlQuery := fmt.Sprintf(`
+		SELECT id, content, layer, user_id, tags, source, access_count, created_at, updated_at
+		FROM memories
+		WHERE (%s) AND (user_id = ? OR user_id = '')
+		ORDER BY access_count DESC
+		LIMIT ?
+	`, whereClause)
+
+	var args []interface{}
+	for _, w := range words {
+		args = append(args, "%"+w+"%")
+	}
+	args = append(args, userID, maxResults*2) // OR 可能返回更多，取 2x 用于后续打分
+
+	results := s.scanRows(sqlQuery, args, maxResults*2)
+	results = s.appendTagResults(userID, words, maxResults, results)
+	return results
+}
+
+// scanRows 执行查询并扫描结果行
+func (s *Store) scanRows(sqlQuery string, args []interface{}, maxResults int) []MemoryRecord {
+	rows, err := s.db.Query(sqlQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("检索记忆失败: %w", err)
+		log.Printf("[Memory] 检索查询失败: %v", err)
+		return nil
 	}
 	defer rows.Close()
 
@@ -353,7 +428,7 @@ func (s *Store) SearchMemories(userID, query string, maxResults int) ([]MemoryRe
 		var m MemoryRecord
 		var createdAt, updatedAt int64
 		if err := rows.Scan(&m.ID, &m.Content, &m.Layer, &m.UserID, &m.Tags, &m.Source, &m.AccessCount, &createdAt, &updatedAt); err != nil {
-			return nil, fmt.Errorf("扫描检索结果失败: %w", err)
+			continue
 		}
 		if seen[m.ID] {
 			continue
@@ -362,9 +437,20 @@ func (s *Store) SearchMemories(userID, query string, maxResults int) ([]MemoryRe
 		m.CreatedAt = time.Unix(createdAt, 0)
 		m.UpdatedAt = time.Unix(updatedAt, 0)
 		results = append(results, m)
+		if len(results) >= maxResults {
+			break
+		}
+	}
+	return results
+}
+
+// appendTagResults 标签 LIKE 检索补充（去重追加）
+func (s *Store) appendTagResults(userID string, words []string, maxResults int, existing []MemoryRecord) []MemoryRecord {
+	seen := make(map[int64]bool)
+	for _, m := range existing {
+		seen[m.ID] = true
 	}
 
-	// 标签检索（补充，去重）
 	tagQuery := fmt.Sprintf(`
 		SELECT m.id, m.content, m.layer, m.user_id, m.tags, m.source, m.access_count, m.created_at, m.updated_at
 		FROM memories m
@@ -374,7 +460,10 @@ func (s *Store) SearchMemories(userID, query string, maxResults int) ([]MemoryRe
 		LIMIT ?
 	`)
 
-	for _, w := range words[:wordLimit] {
+	for _, w := range words {
+		if len(existing) >= maxResults {
+			break
+		}
 		tagRows, err := s.db.Query(tagQuery, "%"+w+"%", userID, maxResults)
 		if err != nil {
 			log.Printf("[Memory] 标签检索失败: %v", err)
@@ -384,8 +473,7 @@ func (s *Store) SearchMemories(userID, query string, maxResults int) ([]MemoryRe
 			var m MemoryRecord
 			var createdAt, updatedAt int64
 			if err := tagRows.Scan(&m.ID, &m.Content, &m.Layer, &m.UserID, &m.Tags, &m.Source, &m.AccessCount, &createdAt, &updatedAt); err != nil {
-				tagRows.Close()
-				return nil, fmt.Errorf("扫描标签检索结果失败: %w", err)
+				continue
 			}
 			if seen[m.ID] {
 				continue
@@ -393,12 +481,14 @@ func (s *Store) SearchMemories(userID, query string, maxResults int) ([]MemoryRe
 			seen[m.ID] = true
 			m.CreatedAt = time.Unix(createdAt, 0)
 			m.UpdatedAt = time.Unix(updatedAt, 0)
-			results = append(results, m)
+			existing = append(existing, m)
+			if len(existing) >= maxResults {
+				break
+			}
 		}
 		tagRows.Close()
 	}
-
-	return results, nil
+	return existing
 }
 
 // ==========================================
