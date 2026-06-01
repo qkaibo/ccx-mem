@@ -59,6 +59,9 @@ func SetupRoutes(rg *gin.RouterGroup, deps *APIDeps) {
 
 	// Search OpenViking
 	evo.POST("/search", searchOpenViking(deps))
+
+	// OpenCode Hook Events (Claude Code lifecycle hooks)
+	evo.POST("/hook-events", ingestHookEvent(deps))
 }
 
 // --- Handlers ---
@@ -428,5 +431,76 @@ func searchOpenViking(deps *APIDeps) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"result": result})
+	}
+}
+
+// --- Hook Event Handler (Claude Code lifecycle hooks via OpenCode) ---
+
+// hookEvent is the payload OpenCode sends when a lifecycle hook fires.
+type hookEvent struct {
+	HookEventName  string `json:"hook_event_name"`  // e.g. "PostToolUse", "Stop", "UserPromptSubmit"
+	SessionID      string `json:"session_id"`
+	TranscriptPath string `json:"transcript_path"`
+	CWD            string `json:"cwd"`
+	// Tool-level fields (populated for PostToolUse / PostToolUseFailure)
+	ToolName      string `json:"tool_name"`
+	ToolInput     string `json:"tool_input"`
+	ToolResponse  string `json:"tool_response"`
+	// Error field (populated for PostToolUseFailure)
+	Error         string `json:"error"`
+}
+
+func ingestHookEvent(deps *APIDeps) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var evt hookEvent
+		if err := c.ShouldBindJSON(&evt); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hook event"})
+			return
+		}
+
+		// Only record tool-use events and session stop — those carry
+		// actionable signals for the evolution pipeline.
+		if evt.HookEventName != "PostToolUse" &&
+			evt.HookEventName != "PostToolUseFailure" &&
+			evt.HookEventName != "Stop" {
+			c.JSON(http.StatusOK, gin.H{"skipped": true, "reason": "non-actionable event"})
+			return
+		}
+
+		// Build a summary from whatever the hook payload provides.
+		summary := evt.HookEventName
+		if evt.ToolName != "" {
+			summary += " | tool=" + evt.ToolName
+		}
+		if evt.ToolResponse != "" {
+			truncated := evt.ToolResponse
+			if len(truncated) > 200 {
+				truncated = truncated[:200]
+			}
+			summary += " | " + truncated
+		}
+
+		success := evt.HookEventName != "PostToolUseFailure" && evt.Error == ""
+		errType := ""
+		if !success {
+			errType = evt.Error
+		}
+
+		trace := &ExecutionTrace{
+			UserID:         evt.SessionID, // best proxy for user — session id
+			RequestSummary: summary,
+			Success:        success,
+			ErrorType:      errType,
+			LatencyMs:      0, // not available in hook payload
+		}
+
+		if deps.Tracker != nil {
+			if _, err := deps.Tracker.RecordTrace(trace); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record trace"})
+				return
+			}
+		}
+
+		c.JSON(http.StatusCreated, gin.H{"trace_recorded": true, "event": evt.HookEventName})
 	}
 }

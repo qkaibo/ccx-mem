@@ -1,0 +1,34 @@
+{
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": "",
+      "hooks": [{
+        "type": "http",
+        "url": "http://localhost:3688/api/v2/evolution/hook-events",
+        "headers": {
+          "Authorization": "Bearer your-proxy-access-key"
+        }
+      }]
+    }],
+    "PostToolUseFailure": [{
+      "matcher": "",
+      "hooks": [{
+        "type": "http",
+        "url": "http://localhost:3688/api/v2/evolution/hook-events",
+        "headers": {
+          "Authorization": "Bearer your-proxy-access-key"
+        }
+      }]
+    }],
+    "Stop": [{
+      "matcher": "",
+      "hooks": [{
+        "type": "http",
+        "url": "http://localhost:3688/api/v2/evolution/hook-events",
+        "headers": {
+          "Authorization": "Bearer your-proxy-access-key"
+        }
+      }]
+    }]
+  }
+}

@@ -23,7 +23,7 @@ func testRouter() (*gin.Engine, *Store, *Publisher) {
 	deps := &APIDeps{
 		Store:     store,
 		Publisher: pub,
-		Tracker:   nil,
+		Tracker:   NewTracker(store),
 		Analyzer:  nil,
 		Auditor:   nil,
 		Patcher:   nil,
@@ -249,5 +249,119 @@ func TestAPISearchOpenViking_Disabled(t *testing.T) {
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 for disabled search, got %d", w.Code)
+	}
+}
+
+// ========== Hook Event API ==========
+
+func TestAPIHookEvent_PostToolUse(t *testing.T) {
+	r, store, _ := testRouter()
+	defer store.Close()
+
+	body := map[string]interface{}{
+		"hook_event_name": "PostToolUse",
+		"session_id":      "session-abc-123",
+		"tool_name":       "Write",
+		"tool_response":   "Wrote 42 lines to /tmp/test.go",
+	}
+	b, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/v2/evolution/hook-events", bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify trace was recorded
+	traces, err := store.GetRecentTraces(1)
+	if err != nil {
+		t.Fatalf("failed to get traces: %v", err)
+	}
+	if len(traces) != 1 {
+		t.Fatalf("expected 1 trace, got %d", len(traces))
+	}
+	if !traces[0].Success {
+		t.Errorf("expected success=true, got %v", traces[0].Success)
+	}
+	if traces[0].UserID != "session-abc-123" {
+		t.Errorf("expected user_id='session-abc-123', got '%s'", traces[0].UserID)
+	}
+}
+
+func TestAPIHookEvent_PostToolUseFailure(t *testing.T) {
+	r, store, _ := testRouter()
+	defer store.Close()
+
+	body := map[string]interface{}{
+		"hook_event_name": "PostToolUseFailure",
+		"session_id":      "session-fail-456",
+		"tool_name":       "Bash",
+		"error":           "exit code 1",
+	}
+	b, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/v2/evolution/hook-events", bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	traces, _ := store.GetRecentTraces(1)
+	if len(traces) != 0 {
+		// Note: testRouter creates a new :memory: store, so there's
+		// only the trace from THIS test. Previous test used its own store.
+		trace := traces[0]
+		if trace.Success {
+			t.Errorf("expected success=false for failure event")
+		}
+		if trace.ErrorType != "exit code 1" {
+			t.Errorf("expected error_type='exit code 1', got '%s'", trace.ErrorType)
+		}
+	}
+}
+
+func TestAPIHookEvent_SkipNonActionable(t *testing.T) {
+	r, store, _ := testRouter()
+	defer store.Close()
+
+	body := map[string]interface{}{
+		"hook_event_name": "UserPromptSubmit",
+		"session_id":      "session-skip",
+	}
+	b, _ := json.Marshal(body)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/v2/evolution/hook-events", bytes.NewBuffer(b))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for skipped event, got %d", w.Code)
+	}
+
+	// Verify no trace was recorded for skipped events
+	traces, _ := store.GetRecentTraces(100)
+	if len(traces) != 0 {
+		t.Errorf("expected 0 traces for skipped event, got %d", len(traces))
+	}
+}
+
+func TestAPIHookEvent_InvalidJSON(t *testing.T) {
+	r, store, _ := testRouter()
+	defer store.Close()
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/v2/evolution/hook-events", bytes.NewBuffer([]byte("not-json")))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid JSON, got %d", w.Code)
 	}
 }
